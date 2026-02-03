@@ -16,25 +16,20 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        /* Google Sites 修復版樣式 */
-        html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            /* 將固定高度改為最小高度，允許內容撐開 */
-            min-height: 100vh;
-            /* 移除 overflow: hidden，避免 iframe 高度不足時切到內容 */
-            overflow: auto; 
-            background-color: #e5e7eb;
+        body {
             font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
+            background-color: #e5e7eb;
+            overflow: hidden; /* 防止整個網頁捲動 */
+            height: 100vh;
         }
         
-        #root {
-            width: 100%;
-            min-height: 100vh;
-            /* 確保根容器也是彈性的 */
-            display: flex;
-            flex-direction: column;
+        /* 手機版樣式覆蓋 */
+        @media (max-width: 768px) {
+            body {
+                overflow: auto; /* 手機版允許 body 捲動 */
+                height: auto;
+                min-height: 100vh;
+            }
         }
 
         /* 自定義捲軸樣式 */
@@ -74,10 +69,15 @@
             background-color: #f00;
             animation: confetti-fall 3s linear infinite;
         }
+        
+        /* 側邊欄箭頭動畫 */
+        .arrow-icon {
+            transition: transform 0.3s ease;
+        }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root" class="h-full"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
@@ -109,7 +109,7 @@
         const Modal = ({ children, onClose }) => {
             return createPortal(
                 <div className="fixed inset-0 w-full h-full bg-black/50 z-[9999] flex items-center justify-center backdrop-blur-sm p-4 animate-pop-in">
-                      {children}
+                     {children}
                 </div>,
                 document.body
             );
@@ -309,8 +309,8 @@
                 }
                 // Step 4 驗證
                 if (currentStep === 3 && formData.fileName.trim() === '') {
-                      alert("請輸入檔案名稱！(Please enter a file name)");
-                      return;
+                     alert("請輸入檔案名稱！(Please enter a file name)");
+                     return;
                 }
                 // Step 5 驗證
                 if (currentStep === 4) {
@@ -1103,7 +1103,7 @@
             // 成功畫面 (包含紙花特效)
             if (showSuccess) {
                 return (
-                    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-gray-50">
+                    <div className="h-full flex flex-col items-center justify-center p-4 relative overflow-hidden bg-gray-50">
                         <Confetti />
                         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-10 text-center z-10 animate-pop-in border border-gray-100">
                             <div className="mb-6 flex justify-center">
@@ -1135,10 +1135,9 @@
             }
 
             return (
-                // Google Sites Fix: removed h-full, added min-h-screen to fix white block issue
-                <div className="min-h-screen w-full flex items-center justify-center p-0 md:p-4 lg:p-8">
-                    {/* 主容器：Desktop 彈性高度 (最小 600px)，Mobile 自動高度 */}
-                    <div className="bg-white w-full max-w-7xl md:rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-auto min-h-[600px] md:h-[90vh] border-0 md:border border-gray-200">
+                <div className="h-full flex items-center justify-center p-0 md:p-4 lg:p-8">
+                    {/* 主容器：Desktop 固定高度，Mobile 自動高度 */}
+                    <div className="bg-white w-full max-w-7xl md:rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-full md:h-[95vh] border-0 md:border border-gray-200">
                         
                         {/* 左側：主操作區 (佔 2/3) */}
                         <div className="flex-1 flex flex-col h-full bg-white relative z-10">
