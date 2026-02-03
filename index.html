@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Autocrat 設定流程模擬器</title>
+    
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 React 和 ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- 引入 Babel 用於解析 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
+            background-color: #e5e7eb;
+            overflow: hidden; /* 防止整個網頁捲動 */
+            height: 100vh;
+        }
+        
+        /* 手機版樣式覆蓋 */
+        @media (max-width: 768px) {
+            body {
+                overflow: auto; /* 手機版允許 body 捲動 */
+                height: auto;
+                min-height: 100vh;
+            }
+        }
+
+        /* 自定義捲軸樣式 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        
+        /* 動畫效果 */
+        @keyframes popIn {
+            0% { transform: scale(0.95); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop-in {
+            animation: popIn 0.3s ease-out forwards;
+        }
+
+        /* 慶祝紙花動畫 */
+        @keyframes confetti-fall {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            animation: confetti-fall 3s linear infinite;
+        }
+        
+        /* 側邊欄箭頭動畫 */
+        .arrow-icon {
+            transition: transform 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="root" class="h-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const { createPortal } = ReactDOM;
+
+        // --- 圖標組件 (SVG Icons) ---
+        const Icon = ({ children, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {children}
+            </svg>
+        );
+
+        const Play = ({ className }) => <Icon className={className}><polygon points="5 3 19 12 5 21 5 3"></polygon></Icon>;
+        const FileText = ({ className }) => <Icon className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></Icon>;
+        const Folder = ({ className }) => <Icon className={className}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></Icon>;
+        const ArrowRight = ({ className }) => <Icon className={className}><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></Icon>;
+        const CheckCircle = ({ className }) => <Icon className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></Icon>;
+        const X = ({ className }) => <Icon className={className}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></Icon>;
+        const HelpCircle = ({ className }) => <Icon className={className}><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></Icon>;
+        const ChevronRight = ({ className }) => <Icon className={className}><polyline points="9 18 15 12 9 6"></polyline></Icon>;
+        const ChevronLeft = ({ className }) => <Icon className={className}><polyline points="15 18 9 12 15 6"></polyline></Icon>;
+        const Copy = ({ className }) => <Icon className={className}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></Icon>;
+        const TriangleRight = ({ className }) => <Icon className={className}><path d="M9 18l6-6-6-6" fill="currentColor"></path></Icon>;
+        const TriangleLeft = ({ className }) => <Icon className={className}><path d="M15 18l-6-6 6-6" fill="currentColor"></path></Icon>;
+        const Trash2 = ({ className }) => <Icon className={className}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></Icon>;
+        const Plus = ({ className }) => <Icon className={className}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></Icon>;
+
+        // --- Portal Modal Component ---
+        // 使用 Portal 確保 Modal 永遠在最上層，不會被父層的 transform 或 overflow 影響
+        const Modal = ({ children, onClose }) => {
+            return createPortal(
+                <div className="fixed inset-0 w-full h-full bg-black/50 z-[9999] flex items-center justify-center backdrop-blur-sm p-4 animate-pop-in">
+                     {children}
+                </div>,
+                document.body
+            );
+        };
+
+        // --- 紙花特效組件 ---
+        const Confetti = () => {
+            const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+            return (
+                <div className="absolute inset-0 overflow-hidden pointer-events-none z-50">
+                    {[...Array(50)].map((_, i) => (
+                        <div 
+                            key={i}
+                            className="confetti"
+                            style={{
+                                left: `${Math.random() * 100}%`,
+                                backgroundColor: colors[Math.floor(Math.random() * colors.length)],
+                                animationDelay: `${Math.random() * 2}s`,
+                                animationDuration: `${2 + Math.random() * 2}s`
+                            }}
+                        />
+                    ))}
+                </div>
+            );
+        };
+
+        // --- 主應用程式組件 ---
+        const AutocratSimulator = () => {
+            const [currentStep, setCurrentStep] = useState(0);
+            const [formData, setFormData] = useState({
+                jobName: '',
+                template: null,
+                mergeTab: 'Sheet1',
+                headerRow: 1,
+                firstDataRow: 2,
+                mappings: {
+                    '<<姓名>>': '姓名',
+                    '<<座號>>': '', 
+                    '<<國文>>': '國文',
+                    '<<英文>>': '英文',
+                    '<<數學>>': '數學',
+                    '<<Email>>': ''
+                },
+                fileName: '', 
+                fileType: 'Google Docs', 
+                destinationFolder: '我的雲端硬碟', 
+                conditions: [], 
+                // Step 8 fields - Updated default template
+                shareDoc: false, 
+                shareDocAs: 'PDF',
+                allowReshare: true,
+                sendGeneric: false,
+                emailTo: '',
+                emailCc: '',
+                emailBcc: '',
+                emailReplyTo: '',
+                emailSubject: '段考成績單', // Updated Template
+                emailBody: `親愛的家長：\n\n附件為您孩子的段考個人成績通知單。\n\n101 導師 陳OO`, // Updated Template
+                runOnFormTrigger: false,
+                runOnTimeTrigger: false
+            });
+            const [showSuccess, setShowSuccess] = useState(false);
+            const [copiedTag, setCopiedTag] = useState(null); 
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
+            const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
+            
+            const contentRef = useRef(null);
+            const timelineRef = useRef(null); 
+
+            // 模擬試算表的欄位名稱
+            const sheetHeaders = [
+                "Timestamp",
+                "Email Address", 
+                "姓名",
+                "班級",
+                "座號",
+                "國文",
+                "英文",
+                "數學",
+                "備註"
+            ];
+
+            // 模擬工作表名稱
+            const sheetNames = ["Sheet1", "成績資料", "表單回應"];
+
+            // 模擬可選的資料夾列表 (Updated)
+            const availableFolders = [
+                "學生優秀作品",
+                "備課資源區",
+                "成績單存放區",
+                "Google Classroom",
+                "我的雲端硬碟"
+            ];
+
+            // 條件運算符
+            const operators = [
+                "equals"
+            ];
+
+            // 步驟資料庫 (優化說明文字)
+            const steps = [
+                {
+                    id: 1,
+                    title: "Name your merge job",
+                    subtitle: "設定工作名稱",
+                    description: "請為這個自動化工作取一個容易辨識的名稱。例如：「第一次段考成績單寄送」。",
+                    hint: "好的名稱能幫助您在日後快速找到並管理這個設定。"
+                },
+                {
+                    id: 2,
+                    title: "Choose template",
+                    subtitle: "選擇模板",
+                    description: "請從 Google 雲端硬碟 中選擇您預先製作好的 Google 文件或簡報作為模板。模板內必須包含 <<標籤>> 以便系統填入資料。",
+                    hint: "若尚未製作模板，可以先建立一個包含 <<姓名>> 等標籤的文件。"
+                },
+                {
+                    id: 3,
+                    title: "Map source data to template",
+                    subtitle: "對應資料欄位",
+                    description: "設定要從哪一個工作表 (Merge tab) 抓取資料，並確認標題列 (Header row) 的位置。系統會嘗試自動對應標籤，請檢查是否正確。",
+                    hint: "Standard 代表標準對應模式，通常不需要更動。"
+                },
+                {
+                    id: 4,
+                    title: "File settings",
+                    subtitle: "設定檔案名稱與類型",
+                    description: "設定產出檔案的名稱與格式。建議在檔名中使用標籤（如 <<姓名>>），這樣每個產出的檔案都會有獨特的名稱。",
+                    hint: "您可以點擊左側藍色直條展開標籤列表，複製後貼上使用。"
+                },
+                {
+                    id: 5,
+                    title: "Choose destination folder(s)",
+                    subtitle: "選擇存放資料夾",
+                    description: "設定產出的檔案要存放在 Google 雲端硬碟 的哪個資料夾中。建議建立一個專屬資料夾，以免檔案散落在根目錄。",
+                    // Updated Hint
+                    hint: "1. 請將滑鼠游標移到資料夾名稱「我的雲端硬碟」後方，會出現垃圾桶圖示，再點擊圖示就可以刪除該資料夾。\n2. 點擊 Choose folder。\n3. 選擇「成績單存放區」。"
+                },
+                {
+                    id: 6,
+                    title: "Add dynamic folder reference (Optional)",
+                    subtitle: "動態資料夾 (選填)",
+                    description: "這是一個進階功能，允許根據欄位值將檔案存入不同的資料夾。對於初學者或一般用途，通常可以直接跳過。",
+                    hint: "直接點擊 Next 跳過此步驟即可。"
+                },
+                {
+                    id: 7,
+                    title: "Set merge condition (Optional)",
+                    subtitle: "設定合併條件 (選填)",
+                    description: "您可以設定篩選條件，例如「當 Email Address 欄位不是空白 (NOT NULL) 時」才執行合併，避免產生無效文件。",
+                    hint: "本次練習請試著加入一個條件：Email Address equals NOT NULL。"
+                },
+                {
+                    id: 8,
+                    title: "Share docs & send emails",
+                    subtitle: "設定寄信內容",
+                    description: "這是最關鍵的步驟！選擇是否要直接將檔案寄給對方。您可以在信件主旨與內文中插入標籤，製作個人化的通知信。",
+                    hint: "試試看客製化信件：\n1. 將 Share doc? 設為 Yes。\n2. 展開左側藍色標籤選單。\n3. 複製標籤 (如 <<姓名>>)，貼入信件主旨或內文的適當位置。"
+                },
+                {
+                    id: 9,
+                    title: "Add/remove job triggers",
+                    subtitle: "設定觸發條件",
+                    description: "設定自動化的時機：可以選擇在「表單提交時」立即執行，或是設定「固定時間」自動執行。",
+                    hint: "表單觸發 (Run on form trigger) 最適合用於即時回覆填表者。"
+                }
+            ];
+
+            // Auto-scroll timeline when step changes
+            useEffect(() => {
+                const stepElement = document.getElementById(`step-indicator-${currentStep}`);
+                if (stepElement) {
+                    stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, [currentStep]);
+
+            const handleNext = () => {
+                // Step 1 驗證
+                if (currentStep === 0 && formData.jobName === '') {
+                    const input = document.getElementById('jobNameInput');
+                    input.focus();
+                    input.classList.add('ring-4', 'ring-red-300');
+                    setTimeout(() => input.classList.remove('ring-4', 'ring-red-300'), 500);
+                    return;
+                }
+                // Step 2 驗證
+                if (currentStep === 1 && !formData.template) {
+                    alert("請點選一個模板來繼續！ (Please select a template)");
+                    return;
+                }
+                // Step 3 驗證
+                if (currentStep === 2) {
+                    const emptyFields = Object.entries(formData.mappings).filter(([key, value]) => !value);
+                    if (emptyFields.length > 0) {
+                         alert(`還有 ${emptyFields.length} 個標籤未完成配對！請選擇對應的欄位 (例如: Email Address, 座號)。\n(Please map all tags to columns)`);
+                         return;
+                    }
+                }
+                // Step 4 驗證
+                if (currentStep === 3 && formData.fileName.trim() === '') {
+                     alert("請輸入檔案名稱！(Please enter a file name)");
+                     return;
+                }
+                // Step 5 驗證
+                if (currentStep === 4) {
+                    if (formData.destinationFolder === '我的雲端硬碟') {
+                        alert("練習提示：請先按下垃圾桶圖示，移除預設的「我的雲端硬碟」資料夾。\n(Please remove the default folder first)");
+                        return;
+                    }
+                    if (formData.destinationFolder === '') {
+                        alert("練習提示：請點選右上角的 Choose folder 選擇資料夾。\n(Please choose a folder)");
+                        return;
+                    }
+                    if (formData.destinationFolder !== '成績單存放區') {
+                         alert("練習提示：請選擇「成績單存放區」作為目標資料夾。\n(Please select '成績單存放區')");
+                         return;
+                    }
+                }
+                // Step 7 驗證 (Conditions)
+                if (currentStep === 6) {
+                    if (formData.conditions.length > 0) {
+                        const hasCorrectCondition = formData.conditions.some(c => 
+                            c.field === 'Email Address' && c.value === 'NOT NULL'
+                        );
+                        if (!hasCorrectCondition) {
+                            alert("練習提示：既然新增了條件，請設定 'Email Address' equals 'NOT NULL'，以避免寄送給沒有 Email 的資料。");
+                            return;
+                        }
+                    }
+                }
+
+                if (currentStep < steps.length - 1) {
+                    setCurrentStep(currentStep + 1);
+                    if (contentRef.current) contentRef.current.scrollTop = 0;
+                } else {
+                    // Save on last step also triggers success
+                    setShowSuccess(true);
+                }
+            };
+
+            const handleBack = () => {
+                if (currentStep > 0) {
+                    setCurrentStep(currentStep - 1);
+                }
+            };
+
+            const handleSave = () => {
+                if (currentStep === steps.length - 1) {
+                    setShowSuccess(true);
+                } else {
+                    alert("Job settings saved! (工作設定已儲存)");
+                }
+            };
+
+            const jumpToStep = (index) => {
+                if (index <= currentStep) {
+                    setCurrentStep(index);
+                }
+            };
+
+            const resetSimulator = () => {
+                setCurrentStep(0);
+                setShowSuccess(false);
+                setIsSidebarOpen(false); 
+                setFormData({
+                    jobName: '',
+                    template: null,
+                    mergeTab: 'Sheet1',
+                    headerRow: 1,
+                    firstDataRow: 2,
+                    mappings: {
+                        '<<姓名>>': '姓名',
+                        '<<座號>>': '', 
+                        '<<國文>>': '國文',
+                        '<<英文>>': '英文',
+                        '<<數學>>': '數學',
+                        '<<Email>>': ''
+                    },
+                    fileName: '', 
+                    fileType: 'Google Docs', 
+                    destinationFolder: '我的雲端硬碟', 
+                    conditions: [],
+                    // Reset Step 8 fields
+                    shareDoc: false,
+                    shareDocAs: 'PDF',
+                    allowReshare: true,
+                    sendGeneric: false,
+                    emailTo: '',
+                    emailCc: '',
+                    emailBcc: '',
+                    emailReplyTo: '',
+                    emailSubject: '段考成績單',
+                    emailBody: `親愛的家長：\n\n附件為您孩子的段考個人成績通知單。\n\n101 導師 陳OO`,
+                    runOnFormTrigger: false,
+                    runOnTimeTrigger: false
+                });
+            };
+
+            const handleCopyTag = (tag) => {
+                navigator.clipboard.writeText(tag).then(() => {
+                    setCopiedTag(tag);
+                    setTimeout(() => setCopiedTag(null), 1500);
+                }).catch(err => {
+                    console.error('Copy failed', err);
+                    alert("瀏覽器限制無法自動複製，請手動複製: " + tag);
+                });
+            };
+
+            const handleChooseFolder = (folderName) => {
+                setFormData({...formData, destinationFolder: folderName});
+                setIsFolderPickerOpen(false);
+            };
+
+            const handleRemoveFolder = () => {
+                setFormData({...formData, destinationFolder: ''});
+            };
+
+            // Condition Logic
+            const handleAddCondition = () => {
+                const newCondition = { field: 'Email Address', operator: 'equals', value: '' };
+                setFormData({
+                    ...formData,
+                    conditions: [...formData.conditions, newCondition]
+                });
+            };
+
+            const handleRemoveCondition = (index) => {
+                const newConditions = [...formData.conditions];
+                newConditions.splice(index, 1);
+                setFormData({...formData, conditions: newConditions});
+            };
+
+            const handleConditionChange = (index, key, value) => {
+                const newConditions = [...formData.conditions];
+                newConditions[index][key] = value;
+                setFormData({...formData, conditions: newConditions});
+            };
+
+            // 渲染步驟內容
+            const renderStepContent = () => {
+                switch (currentStep) {
+                    case 0: // Job Name
+                        return (
+                            <div className="space-y-4 animate-pop-in">
+                                <div>
+                                    <label className="block text-base font-bold text-gray-800 mb-2">Job name</label>
+                                    <div className="text-sm text-gray-500 mb-2 font-medium">👉 設定工作名稱</div>
+                                    <input 
+                                        id="jobNameInput"
+                                        type="text" 
+                                        className="w-full rounded-md border-gray-300 border-2 p-3 text-base focus:border-red-500 focus:outline-none transition-colors"
+                                        placeholder="e.g. Exam Results"
+                                        value={formData.jobName}
+                                        onChange={(e) => setFormData({...formData, jobName: e.target.value})}
+                                        autoFocus
+                                    />
+                                    <p className="text-sm text-gray-400 mt-2">Enter a name for this merge job.</p>
+                                </div>
+                            </div>
+                        );
+                    case 1: // Choose Template
+                        return (
+                            <div className="space-y-4 animate-pop-in">
+                                <div className="flex gap-2 mb-2 flex-wrap">
+                                    <button className="bg-blue-600 text-white px-4 py-3 rounded shadow hover:bg-blue-700 transition active:scale-95 flex flex-col items-center flex-grow md:flex-grow-0">
+                                        <span className="text-sm font-bold">From drive</span>
+                                        <span className="text-xs opacity-80">(從雲端硬碟)</span>
+                                    </button>
+                                    <button className="bg-gray-100 text-gray-700 px-4 py-3 rounded hover:bg-gray-200 transition flex flex-col items-center flex-grow md:flex-grow-0">
+                                        <span className="text-sm font-bold">Create example</span>
+                                        <span className="text-xs text-gray-500">(建立範本)</span>
+                                    </button>
+                                </div>
+                                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                                    <p className="text-sm text-gray-500 font-medium">Recently used templates:</p>
+                                    {['給家長的段考成績通知單', '學測模擬考成績通知單', '學期成績預警通知'].map((temp) => (
+                                        <div 
+                                            key={temp}
+                                            onClick={() => setFormData({...formData, template: temp})}
+                                            className={`flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all ${formData.template === temp ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'}`}
+                                        >
+                                            <FileText className={`w-6 h-6 mr-3 shrink-0 ${formData.template === temp ? 'text-blue-600' : 'text-gray-400'}`} />
+                                            <span className={`text-sm font-medium ${formData.template === temp ? 'text-blue-800' : 'text-gray-700'}`}>{temp}</span>
+                                            {formData.template === temp && <CheckCircle className="ml-auto text-blue-500 w-5 h-5 shrink-0" />}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 2: // Map Data
+                        return (
+                            <div className="space-y-4 animate-pop-in">
+                                {/* 提示語 */}
+                                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
+                                     <p className="text-sm text-blue-700">
+                                        <strong>模擬練習：</strong> 系統已自動配對部分欄位。<br/>
+                                        <span className="text-xs text-blue-600 opacity-80 mt-1 block">請檢查並手動設定未成功配對的欄位 (例如：座號、Email)。</span>
+                                     </p>
+                                </div>
+
+                                {/* 上半部：工作表選擇區 (單行顯示) */}
+                                <div className="bg-white p-4 rounded-lg border border-gray-300 mb-4">
+                                    <div className="flex flex-col md:flex-row gap-4 md:items-end">
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-gray-700 mb-1">Merge tab</label>
+                                            <select 
+                                                className="w-full text-base bg-gray-50 border-gray-300 rounded shadow-sm p-2 border focus:border-blue-500 focus:outline-none"
+                                                value={formData.mergeTab}
+                                                onChange={(e) => setFormData({...formData, mergeTab: e.target.value})}
+                                            >
+                                                {sheetNames.map(name => (
+                                                    <option key={name} value={name}>{name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="flex gap-4 w-full md:w-auto">
+                                            <div className="flex-1 md:w-24">
+                                                <label className="block text-xs font-bold text-gray-700 mb-1">Header row</label>
+                                                <input 
+                                                    type="number" 
+                                                    className="w-full text-base bg-gray-50 border-gray-300 rounded shadow-sm p-2 border focus:border-blue-500 focus:outline-none"
+                                                    value={formData.headerRow}
+                                                    onChange={(e) => setFormData({...formData, headerRow: parseInt(e.target.value)})}
+                                                    min="1"
+                                                />
+                                            </div>
+                                            <div className="flex-1 md:w-24">
+                                                <label className="block text-xs font-bold text-gray-700 mb-1">First data row</label>
+                                                <input 
+                                                    type="number" 
+                                                    className="w-full text-base bg-gray-50 border-gray-300 rounded shadow-sm p-2 border focus:border-blue-500 focus:outline-none"
+                                                    value={formData.firstDataRow}
+                                                    onChange={(e) => setFormData({...formData, firstDataRow: parseInt(e.target.value)})}
+                                                    min="2"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 下半部：欄位配對區 */}
+                                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                    {/* 欄位標題 - 修正順序：Type, Tags, Map to column */}
+                                    <div className="bg-gray-100 p-2 grid grid-cols-12 gap-2 text-xs font-bold text-gray-600 border-b border-gray-200 uppercase tracking-wide">
+                                        <div className="col-span-3 pl-2">Type</div>
+                                        <div className="col-span-4">Tags</div>
+                                        <div className="col-span-5">Map to column</div>
+                                    </div>
+                                    
+                                    {/* 捲動區域 */}
+                                    <div className="bg-white max-h-[250px] overflow-y-auto p-2">
+                                        {Object.keys(formData.mappings).map((tag) => (
+                                            <div key={tag} className="grid grid-cols-12 gap-2 items-center mb-3 group p-1 rounded transition-colors">
+                                                {/* Type Column */}
+                                                <div className="col-span-3 pl-2 text-[10px] text-gray-400">Standard</div>
+                                                
+                                                {/* Tags Column */}
+                                                <div className="col-span-4 text-gray-700 font-mono text-sm font-medium text-ellipsis overflow-hidden whitespace-nowrap">
+                                                    {tag}
+                                                </div>
+                                                
+                                                {/* Map to Column (Dropdown) */}
+                                                <div className="col-span-5">
+                                                    <select 
+                                                        className={`w-full text-base border rounded shadow-sm p-1.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors ${formData.mappings[tag] ? 'border-gray-300 text-gray-800 bg-white' : 'border-red-300 bg-red-50 text-gray-500'}`}
+                                                        value={formData.mappings[tag]}
+                                                        onChange={(e) => setFormData(prev => ({
+                                                            ...prev,
+                                                            mappings: { ...prev.mappings, [tag]: e.target.value }
+                                                        }))}
+                                                    >
+                                                        <option value="">Select column...</option>
+                                                        {sheetHeaders.map(header => (
+                                                            <option key={header} value={header}>{header}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    case 3: // File Settings
+                        return (
+                            <div className="flex gap-4 animate-pop-in h-full relative">
+                                {/* Collapsible Blue Sidebar */}
+                                <div 
+                                    className={`rounded-r-lg shadow-lg flex flex-col transition-all duration-300 ease-in-out absolute z-20 left-0 top-0 h-[300px] mt-4 
+                                    ${isSidebarOpen ? 'w-64 p-4 bg-blue-100 text-blue-900 border-r border-blue-200' : 'w-8 cursor-pointer bg-blue-100 hover:bg-blue-200 border-r border-blue-200'}`}
+                                    onClick={() => !isSidebarOpen && setIsSidebarOpen(true)}
+                                >
+                                    {/* Toggle Button / Header */}
+                                    <div className={`flex items-center ${isSidebarOpen ? 'justify-between border-b border-blue-300 pb-2 mb-2' : 'h-full justify-center'}`}>
+                                        {isSidebarOpen ? (
+                                            <>
+                                                <span className="font-bold text-sm">Tags</span>
+                                                <div 
+                                                    onClick={(e) => { e.stopPropagation(); setIsSidebarOpen(false); }}
+                                                    className="cursor-pointer p-1 hover:bg-blue-200 rounded"
+                                                >
+                                                    <TriangleLeft className="w-4 h-4 text-blue-900" />
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div title="點擊展開標籤列表" className="flex items-center justify-center h-full w-full">
+                                                {/* 收合狀態：箭頭為深藍色 */}
+                                                <TriangleRight className="w-4 h-4 text-blue-900" />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Sidebar Content */}
+                                    {isSidebarOpen && (
+                                        <>
+                                            <div className="space-y-2 overflow-y-auto flex-1 pr-1 scrollbar-thin scrollbar-thumb-blue-300 scrollbar-track-blue-200">
+                                                {Object.keys(formData.mappings).map(tag => (
+                                                    <div 
+                                                        key={tag}
+                                                        onClick={(e) => { e.stopPropagation(); handleCopyTag(tag); }}
+                                                        className="bg-white hover:bg-blue-50 active:bg-blue-100 cursor-pointer p-2 rounded text-xs font-mono transition-colors border border-blue-200 flex items-center justify-between group shadow-sm select-none"
+                                                        title="點擊複製標籤"
+                                                    >
+                                                        <span>{tag}</span>
+                                                        <span className={`text-[10px] transition-all font-bold ${copiedTag === tag ? 'text-green-600 opacity-100' : 'opacity-0'}`}>
+                                                            {copiedTag === tag ? '已複製!' : ''}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="mt-2 text-[10px] text-blue-500 text-center">
+                                                複製後請按 Ctrl + V 貼上
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Right Form Fields */}
+                                <div className="flex-1 space-y-6 pt-2 pl-12 md:pl-12">
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-800 mb-1">File name</label>
+                                        <div className="text-xs text-gray-500 mb-2 font-medium">👉 檔案名稱 (點擊左側藍色直條展開標籤，複製再貼上)</div>
+                                        <input 
+                                            type="text" 
+                                            className="block w-full rounded-md border-gray-300 border-2 p-3 text-base focus:border-blue-500 focus:outline-none transition-colors"
+                                            placeholder="請在此貼上，例如：成績單_<<姓名>>"
+                                            value={formData.fileName}
+                                            onChange={(e) => setFormData({...formData, fileName: e.target.value})}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-800 mb-1">Type</label>
+                                        <div className="text-xs text-gray-500 mb-2 font-medium">👉 檔案類型 (請下拉選擇)</div>
+                                        <div className="relative">
+                                            <select 
+                                                className="block w-full rounded-md border-gray-300 border-2 p-3 pr-10 text-base focus:border-blue-500 focus:outline-none transition-colors appearance-none bg-white cursor-pointer"
+                                                value={formData.fileType}
+                                                onChange={(e) => setFormData({...formData, fileType: e.target.value})}
+                                            >
+                                                <option value="Google Docs">Google Docs</option>
+                                                <option value="PDF">PDF</option>
+                                            </select>
+                                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-xs text-yellow-800 flex items-start gap-2">
+                                        <HelpCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                        <div>
+                                            <strong>小技巧：</strong> 建議將檔名設為 <b>PDF</b> 並加上 <b>{'<<姓名>>'}</b> 等標籤，這樣每個學生都會收到專屬於自己名字的檔案，且無法隨意修改成績。
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    case 4: // Destination Folder (Updated with Interaction)
+                        return (
+                            <div className="space-y-4 animate-pop-in relative">
+                                <div className="flex justify-between items-end">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Selected Folders</label>
+                                    <button 
+                                        onClick={() => setIsFolderPickerOpen(true)}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition flex items-center gap-2 active:scale-95 text-sm"
+                                    >
+                                        <Folder className="w-4 h-4" /> Choose folder
+                                    </button>
+                                </div>
+                                <div className="space-y-2">
+                                    {formData.destinationFolder ? (
+                                        <div className="p-3 border rounded-lg flex items-center justify-between bg-white shadow-sm hover:shadow transition-shadow group">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-gray-100 p-2 rounded text-gray-600">
+                                                    <Folder className="w-6 h-6" />
+                                                </div>
+                                                <div className="overflow-hidden">
+                                                    <div className="text-sm font-medium text-gray-800 truncate">{formData.destinationFolder}</div>
+                                                    <div className="text-xs text-gray-400">目前選擇的資料夾</div>
+                                                </div>
+                                            </div>
+                                            {/* Trash button appears on hover */}
+                                            <button 
+                                                onClick={handleRemoveFolder}
+                                                className="text-gray-300 hover:text-red-500 p-3 rounded-full hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                                                title="Remove folder"
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center text-gray-400 text-sm">
+                                            尚未選擇資料夾，請點擊右上角按鈕選擇。
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Folder Picker Modal (Using Portal for Z-Index Fix) */}
+                                {isFolderPickerOpen && (
+                                    <Modal onClose={() => setIsFolderPickerOpen(false)}>
+                                        <div className="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
+                                            <div className="bg-gray-100 p-4 border-b flex justify-between items-center shrink-0">
+                                                <span className="font-bold text-gray-700 text-base">Select a folder</span>
+                                                <button onClick={() => setIsFolderPickerOpen(false)} className="text-gray-400 hover:text-gray-600 p-2 -mr-2">
+                                                    <X className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                            <div className="p-2 overflow-y-auto flex-1">
+                                                {availableFolders.map(folder => (
+                                                    <div 
+                                                        key={folder}
+                                                        onClick={() => handleChooseFolder(folder)}
+                                                        className="flex items-center gap-3 p-3 hover:bg-blue-50 cursor-pointer rounded transition-colors group border-b last:border-0"
+                                                    >
+                                                        <Folder className="w-5 h-5 text-gray-400 group-hover:text-blue-500" />
+                                                        <span className="text-base text-gray-700 group-hover:text-blue-700">{folder}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="p-3 border-t bg-gray-50 flex justify-end shrink-0">
+                                                <button 
+                                                    onClick={() => setIsFolderPickerOpen(false)}
+                                                    className="px-4 py-2 bg-white border rounded text-sm hover:bg-gray-100"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </Modal>
+                                )}
+                            </div>
+                        );
+                    case 5: // Dynamic Folder
+                        return (
+                            <div className="flex flex-col items-center justify-center h-[200px] text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-300 animate-pop-in">
+                                <p className="font-medium text-lg mb-2 text-gray-600">Optional Setting</p>
+                                <p className="text-sm mb-6 text-center max-w-xs text-gray-500">
+                                    此步驟為「動態資料夾」設定
+                                    <br/>(Advanced Feature)
+                                </p>
+                                <button 
+                                    onClick={handleNext}
+                                    className="px-6 py-2 bg-white border border-gray-300 rounded text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition shadow-sm"
+                                >
+                                    Next (跳過)
+                                </button>
+                            </div>
+                        );
+                    case 6: // Set merge condition (Step 7)
+                        return (
+                            <div className="space-y-4 animate-pop-in">
+                                {/* Header with Add button on the right */}
+                                <div className="flex justify-between items-center border-b border-gray-200 pb-2 mb-4">
+                                    <label className="text-sm font-bold text-gray-700">Merge conditions</label>
+                                    <button 
+                                        onClick={handleAddCondition}
+                                        className="bg-blue-600 text-white px-3 py-1.5 rounded shadow hover:bg-blue-700 transition flex items-center gap-1 active:scale-95 text-xs font-bold"
+                                    >
+                                        <Plus className="w-3 h-3" /> Add condition
+                                    </button>
+                                </div>
+                                
+                                {/* Conditions List Container */}
+                                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 min-h-[150px]">
+                                    {formData.conditions.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
+                                            {/* Updated Empty State Text */}
+                                            <p className="text-sm">No conditionals set up yet. Click "Add condition".</p>
+                                            <p className="text-xs text-gray-400">(尚未設定條件。請點擊 "Add condition")</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {/* Updated Header Text */}
+                                            <div>
+                                                <div className="font-bold text-gray-700 text-sm">Only merge a row if:</div>
+                                                <div className="text-xs text-gray-500 mb-2">(僅合併符合以下條件的資料列：)</div>
+                                            </div>
+                                            
+                                            {formData.conditions.map((condition, index) => (
+                                                <div key={index} className="flex flex-col gap-2">
+                                                    {index > 0 && (
+                                                        <div className="text-xs font-bold text-gray-500 uppercase py-1">AND</div>
+                                                    )}
+                                                    <div className="flex items-center gap-2 p-2 bg-white border rounded">
+                                                        {/* Added 'Column' label */}
+                                                        <div>
+                                                            <span className="text-sm font-medium text-gray-600">Column</span>
+                                                            <div className="text-[10px] text-gray-400">(欄位)</div>
+                                                        </div>
+                                                        <select 
+                                                            className="text-base border-gray-300 rounded p-2 flex-1 shadow-sm focus:border-blue-500 focus:outline-none"
+                                                            value={condition.field}
+                                                            onChange={(e) => handleConditionChange(index, 'field', e.target.value)}
+                                                        >
+                                                            {sheetHeaders.map(header => <option key={header} value={header}>{header}</option>)}
+                                                        </select>
+                                                        
+                                                        {/* Static text 'equals' instead of dropdown */}
+                                                        <div className="px-2 text-sm text-gray-600 font-medium flex flex-col items-center">
+                                                            <span>equals</span>
+                                                            <span className="text-[10px] text-gray-400 font-normal ml-1">(等於)</span>
+                                                        </div>
+
+                                                        {/* Input field for value with specified placeholder */}
+                                                        <input 
+                                                            type="text" 
+                                                            className="text-base border-gray-300 rounded p-2 flex-1 shadow-sm focus:border-blue-500 focus:outline-none"
+                                                            placeholder="" 
+                                                            value={condition.value}
+                                                            onChange={(e) => handleConditionChange(index, 'value', e.target.value)}
+                                                        />
+                                                        <button 
+                                                            onClick={() => handleRemoveCondition(index)}
+                                                            className="text-gray-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-full transition-colors"
+                                                            title="Remove condition"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {/* Updated Footer Text */}
+                                            <div className="mt-4 pt-2 border-t border-gray-200">
+                                                <div className="text-xs text-gray-500 italic">
+                                                    *Only rows that meet the above conditions will be merged.
+                                                </div>
+                                                <div className="text-[10px] text-gray-400 mb-2">
+                                                    (*只有符合上述條件的資料列才會被合併。)
+                                                </div>
+                                                
+                                                {/* Moved placeholder text here as static instruction */}
+                                                <div className="text-xs text-gray-600 font-medium bg-yellow-50 p-2 rounded border border-yellow-100">
+                                                    Enter a specific value, NULL (empty) or NOT NULL (not empty)
+                                                    <div className="text-[10px] text-gray-500 mt-1 font-normal">
+                                                        (請輸入特定值，NULL (空白) 或 NOT NULL (非空白))
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Guide/Tip Box */}
+                                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-xs text-blue-800 flex items-start gap-2 mt-4">
+                                    <HelpCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                    <div>
+                                        <strong>練習目標：</strong> 試著加入一個條件，設定當 <b>Email Address</b> 為 <b>NOT NULL</b> 時才執行，避免產生錯誤。
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    case 7: // Share & Email (Step 8) - Updated with Fixed Header, Sidebar & Logic
+                        return (
+                            <div className="flex gap-4 animate-pop-in h-full relative">
+                                {/* Collapsible Blue Sidebar (Same as Step 4) */}
+                                <div 
+                                    className={`rounded-r-lg shadow-lg flex flex-col transition-all duration-300 ease-in-out absolute z-20 left-0 top-0 h-[300px] mt-4 
+                                    ${isSidebarOpen ? 'w-64 p-4 bg-blue-100 text-blue-900 border-r border-blue-200' : 'w-8 cursor-pointer bg-blue-100 hover:bg-blue-200 border-r border-blue-200'}`}
+                                    onClick={() => !isSidebarOpen && setIsSidebarOpen(true)}
+                                >
+                                    {/* Toggle Button / Header */}
+                                    <div className={`flex items-center ${isSidebarOpen ? 'justify-between border-b border-blue-300 pb-2 mb-2' : 'h-full justify-center'}`}>
+                                        {isSidebarOpen ? (
+                                            <>
+                                                <span className="font-bold text-sm">Tags</span>
+                                                <div 
+                                                    onClick={(e) => { e.stopPropagation(); setIsSidebarOpen(false); }}
+                                                    className="cursor-pointer p-1 hover:bg-blue-200 rounded"
+                                                >
+                                                    <TriangleLeft className="w-4 h-4 text-blue-900" />
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div title="點擊展開標籤列表" className="flex items-center justify-center h-full w-full">
+                                                <TriangleRight className="w-4 h-4 text-blue-900" />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Sidebar Content */}
+                                    {isSidebarOpen && (
+                                        <>
+                                            <div className="space-y-2 overflow-y-auto flex-1 pr-1 scrollbar-thin scrollbar-thumb-blue-300 scrollbar-track-blue-200">
+                                                {Object.keys(formData.mappings).map(tag => (
+                                                    <div 
+                                                        key={tag}
+                                                        onClick={(e) => { e.stopPropagation(); handleCopyTag(tag); }}
+                                                        className="bg-white hover:bg-blue-50 active:bg-blue-100 cursor-pointer p-2 rounded text-xs font-mono transition-colors border border-blue-200 flex items-center justify-between group shadow-sm select-none"
+                                                        title="點擊複製標籤"
+                                                    >
+                                                        <span>{tag}</span>
+                                                        <span className={`text-[10px] transition-all font-bold ${copiedTag === tag ? 'text-green-600 opacity-100' : 'opacity-0'}`}>
+                                                            {copiedTag === tag ? '已複製!' : ''}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="mt-2 text-[10px] text-blue-500 text-center">
+                                                複製後請按 Ctrl + V 貼上
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Right Form Content */}
+                                <div className="flex-1 space-y-4 pt-2 pl-10 md:pl-12 overflow-y-auto pr-2 pb-2">
+                                    {/* Section 1: Settings */}
+                                    <div className="space-y-3 bg-gray-50 p-3 rounded border border-gray-200">
+                                        <div className="flex justify-between items-center">
+                                            <div className="text-sm font-bold text-gray-700">Share doc? <span className="text-xs text-gray-400 font-normal">(是否分享)</span></div>
+                                            <div className="flex bg-white rounded shadow-sm border p-0.5">
+                                                <button 
+                                                    className={`px-3 py-0.5 text-xs rounded transition-colors ${formData.shareDoc ? 'bg-blue-500 text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
+                                                    onClick={() => setFormData({...formData, shareDoc: true})}
+                                                >Yes</button>
+                                                <button 
+                                                    className={`px-3 py-0.5 text-xs rounded transition-colors ${!formData.shareDoc ? 'bg-blue-500 text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
+                                                    onClick={() => setFormData({...formData, shareDoc: false})}
+                                                >No</button>
+                                            </div>
+                                        </div>
+
+                                        {/* Hide everything below if Share doc is No */}
+                                        {formData.shareDoc && (
+                                            <>
+                                                <div className="flex justify-between items-center animate-pop-in">
+                                                    <div className="text-sm font-medium text-gray-700">Share doc as <span className="text-xs text-gray-400 font-normal">(檔案格式)</span></div>
+                                                    <select 
+                                                        className="text-xs border border-gray-300 rounded p-1 w-32 bg-white"
+                                                        value={formData.shareDocAs}
+                                                        onChange={(e) => setFormData({...formData, shareDocAs: e.target.value})}
+                                                    >
+                                                        <option value="PDF">PDF</option>
+                                                        <option value="Google Docs">Google Docs</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="flex justify-between items-center animate-pop-in">
+                                                    <div className="text-sm font-medium text-gray-700">Allow collaborators to re-share <span className="text-xs text-gray-400 font-normal">(允許協作者分享)</span></div>
+                                                    <div className="flex bg-white rounded shadow-sm border p-0.5">
+                                                        <button 
+                                                            className={`px-3 py-0.5 text-xs rounded transition-colors ${formData.allowReshare ? 'bg-blue-500 text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
+                                                            onClick={() => setFormData({...formData, allowReshare: true})}
+                                                        >Yes</button>
+                                                        <button 
+                                                            className={`px-3 py-0.5 text-xs rounded transition-colors ${!formData.allowReshare ? 'bg-blue-500 text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
+                                                            onClick={() => setFormData({...formData, allowReshare: false})}
+                                                        >No</button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex justify-between items-center animate-pop-in">
+                                                    <div className="text-sm font-medium text-gray-700">Send from generic no-reply address <span className="text-xs text-gray-400 font-normal">(使用無人回覆地址)</span></div>
+                                                    <div className="flex bg-white rounded shadow-sm border p-0.5">
+                                                        <button 
+                                                            className={`px-3 py-0.5 text-xs rounded transition-colors ${formData.sendGeneric ? 'bg-blue-500 text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
+                                                            onClick={() => setFormData({...formData, sendGeneric: true})}
+                                                        >Yes</button>
+                                                        <button 
+                                                            className={`px-3 py-0.5 text-xs rounded transition-colors ${!formData.sendGeneric ? 'bg-blue-500 text-white font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
+                                                            onClick={() => setFormData({...formData, sendGeneric: false})}
+                                                        >No</button>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Section 2: Email Content (Only show if shareDoc is true) */}
+                                    {formData.shareDoc && (
+                                        <div className="space-y-3 pt-1 animate-pop-in">
+                                            <div className="grid grid-cols-1 gap-2">
+                                                <div>
+                                                    <label className="text-xs font-bold text-gray-600">To <span className="font-normal text-gray-400">(收件人)</span></label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full border border-gray-300 rounded p-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                                                        value={formData.emailTo}
+                                                        onChange={(e) => setFormData({...formData, emailTo: e.target.value})}
+                                                        placeholder="請使用標籤，例如 <<Email>>"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="text-xs font-bold text-gray-600">CC <span className="font-normal text-gray-400">(副本)</span></label>
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full border border-gray-300 rounded p-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                                                            value={formData.emailCc}
+                                                            onChange={(e) => setFormData({...formData, emailCc: e.target.value})}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs font-bold text-gray-600">BCC <span className="font-normal text-gray-400">(密件副本)</span></label>
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full border border-gray-300 rounded p-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                                                            value={formData.emailBcc}
+                                                            onChange={(e) => setFormData({...formData, emailBcc: e.target.value})}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs font-bold text-gray-600">Reply To <span className="font-normal text-gray-400">(回覆地址)</span></label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full border border-gray-300 rounded p-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                                                        value={formData.emailReplyTo}
+                                                        onChange={(e) => setFormData({...formData, emailReplyTo: e.target.value})}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="border-t pt-2">
+                                                <label className="text-xs font-bold text-gray-600 block mb-1">Type in subject <span className="font-normal text-gray-400">(信件主旨)</span></label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full border border-gray-300 rounded p-1.5 text-sm focus:border-blue-500 focus:outline-none mb-2"
+                                                    value={formData.emailSubject}
+                                                    onChange={(e) => setFormData({...formData, emailSubject: e.target.value})}
+                                                    placeholder="Subject line (supports tags)"
+                                                />
+                                                
+                                                <label className="text-xs font-bold text-gray-600 block mb-1">Type in message <span className="font-normal text-gray-400">(信件內文)</span></label>
+                                                <textarea 
+                                                    className="w-full border border-gray-300 rounded p-1.5 text-sm h-32 focus:border-blue-500 focus:outline-none resize-none"
+                                                    value={formData.emailBody}
+                                                    onChange={(e) => setFormData({...formData, emailBody: e.target.value})}
+                                                    placeholder="Email body (supports tags like <<姓名>>)"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    case 8: // Triggers
+                        return (
+                            <div className="space-y-4 py-4 animate-pop-in">
+                                <div 
+                                    className={`flex items-center justify-between p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.runOnFormTrigger ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                    onClick={() => setFormData({...formData, runOnFormTrigger: !formData.runOnFormTrigger})}
+                                >
+                                    <div>
+                                        <div className="font-bold text-gray-800">Run on form trigger</div>
+                                        <div className="text-xs text-gray-500 mt-1">👉 表單觸發 (有人提交表單時執行)</div>
+                                    </div>
+                                    <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${formData.runOnFormTrigger ? 'bg-red-500' : 'bg-gray-300'}`}>
+                                        <div className={`bg-white w-4 h-4 rounded-full shadow transition-transform duration-300 ${formData.runOnFormTrigger ? 'translate-x-6' : ''}`}></div>
+                                    </div>
+                                </div>
+
+                                <div 
+                                    className={`flex items-center justify-between p-4 rounded-lg border-2 cursor-pointer transition-all ${formData.runOnTimeTrigger ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}
+                                    onClick={() => setFormData({...formData, runOnTimeTrigger: !formData.runOnTimeTrigger})}
+                                >
+                                    <div>
+                                        <div className="font-bold text-gray-800">Run on time trigger</div>
+                                        <div className="text-xs text-gray-500 mt-1">👉 時間觸發 (定時執行)</div>
+                                    </div>
+                                    <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${formData.runOnTimeTrigger ? 'bg-red-500' : 'bg-gray-300'}`}>
+                                        <div className={`bg-white w-4 h-4 rounded-full shadow transition-transform duration-300 ${formData.runOnTimeTrigger ? 'translate-x-6' : ''}`}></div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    default:
+                        return null;
+                }
+            };
+
+            // 成功畫面 (包含紙花特效)
+            if (showSuccess) {
+                return (
+                    <div className="h-full flex flex-col items-center justify-center p-4 relative overflow-hidden bg-gray-50">
+                        <Confetti />
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-10 text-center z-10 animate-pop-in border border-gray-100">
+                            <div className="mb-6 flex justify-center">
+                                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center">
+                                    <CheckCircle className="text-green-500 w-12 h-12" />
+                                </div>
+                            </div>
+                            <h2 className="text-3xl font-extrabold text-gray-800 mb-2">Setup Complete!</h2>
+                            <p className="text-gray-500 text-sm mb-4">設定完成</p>
+                            <p className="text-gray-600 mb-8 leading-relaxed">
+                                You have successfully created the job:<br/>
+                                <span className="font-bold text-red-500 text-lg">{formData.jobName}</span>
+                            </p>
+                            
+                            <div className="flex flex-col gap-3">
+                                <button className="w-full py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition shadow-lg hover:shadow-xl font-bold flex items-center justify-center gap-2 transform hover:scale-[1.02] active:scale-95">
+                                    <Play className="w-5 h-5" /> Run Job (立即執行)
+                                </button>
+                                <button 
+                                    onClick={resetSimulator}
+                                    className="w-full py-3 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition font-medium"
+                                >
+                                    Start Over (重新練習)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="h-full flex items-center justify-center p-0 md:p-4 lg:p-8">
+                    {/* 主容器：Desktop 固定高度，Mobile 自動高度 */}
+                    <div className="bg-white w-full max-w-7xl md:rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-full md:h-[95vh] border-0 md:border border-gray-200">
+                        
+                        {/* 左側：主操作區 (佔 2/3) */}
+                        <div className="flex-1 flex flex-col h-full bg-white relative z-10">
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-red-600 to-red-500 text-white p-4 flex items-center justify-between shadow-md shrink-0">
+                                <div className="flex items-center gap-2">
+                                    <div className="bg-white/20 p-1 rounded">
+                                        <ArrowRight className="transform rotate-45 w-5 h-5 text-white" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <h1 className="text-lg font-bold tracking-wide leading-none">AutoCrat Simulator</h1>
+                                        <span className="text-[10px] opacity-80 font-normal">製作者：楊小山 CHY</span>
+                                    </div>
+                                </div>
+                                <div className="text-xs font-mono bg-black/20 px-3 py-1 rounded-full border border-white/10">
+                                    Step {currentStep + 1} / {steps.length}
+                                </div>
+                            </div>
+
+                            {/* Scrollable Content Area */}
+                            <div ref={contentRef} className="flex-1 p-4 md:p-8 overflow-y-auto bg-white scroll-smooth relative">
+                                <div className="max-w-2xl mx-auto pb-4">
+                                    {/* --- Fixed Header Area Inside Content --- */}
+                                    <div className="sticky top-0 bg-white/95 backdrop-blur-sm z-30 pb-4 border-b mb-6 transition-all pt-2">
+                                        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                            <span className="bg-red-100 text-red-600 w-8 h-8 rounded-full flex items-center justify-center text-base shrink-0">{steps[currentStep].id}</span>
+                                            {steps[currentStep].title}
+                                        </h2>
+                                        <h3 className="text-gray-400 font-medium ml-10 text-sm uppercase tracking-wider mt-1">
+                                            {steps[currentStep].subtitle}
+                                        </h3>
+                                    </div>
+
+                                    <div className="ml-0 md:ml-10">
+                                        {renderStepContent()}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Footer Navigation */}
+                            <div className="p-4 border-t bg-gray-50 flex justify-between items-center shrink-0">
+                                {/* Left Group: Cancel & Save */}
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={resetSimulator}
+                                        className="px-4 py-3 rounded-lg text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 hover:shadow-sm transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        onClick={handleSave}
+                                        className="px-4 py-3 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 shadow-md transition-all active:scale-95"
+                                    >
+                                        Save
+                                    </button>
+                                </div>
+
+                                {/* Right Group: Back & Next */}
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={handleBack}
+                                        disabled={currentStep === 0}
+                                        className={`px-4 py-3 rounded-lg text-sm font-medium transition-all ${currentStep === 0 ? 'opacity-0 cursor-default' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                    >
+                                        Back
+                                    </button>
+                                    <button 
+                                        onClick={handleNext}
+                                        className="px-6 py-3 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
+                                    >
+                                        {currentStep === steps.length - 1 ? "Save" : "Next"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 右側：教學說明區 (佔 1/3，手機版在下方) */}
+                        <div className="w-full md:w-80 bg-gray-50 border-t md:border-t-0 md:border-l border-gray-200 flex flex-col h-auto md:h-full shrink-0 shadow-[inset_10px_0_20px_-10px_rgba(0,0,0,0.05)] order-last">
+                            {/* Current Step Guide */}
+                            <div className="p-6 bg-white border-b border-gray-200 shrink-0">
+                                <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-1">
+                                    <HelpCircle className="w-4 h-4" /> 操作指引
+                                </h4>
+                                <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 shadow-sm">
+                                    <p className="text-gray-800 text-base leading-relaxed font-medium">
+                                        {steps[currentStep].description}
+                                    </p>
+                                    <div className="mt-3 pt-3 border-t border-yellow-200/50">
+                                        <p className="text-sm text-yellow-700 flex flex-col gap-1">
+                                            <span className="font-bold">💡 提示：</span>
+                                            <span className="pl-1 whitespace-pre-line">{steps[currentStep].hint}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Timeline Header (Fixed) */}
+                            <div className="px-6 pb-2 pt-4 bg-gray-50 border-t border-gray-200 shrink-0 z-10">
+                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">設定進度</h4>
+                            </div>
+
+                            {/* Timeline List (Scrollable) */}
+                            <div className="flex-1 overflow-y-auto px-6 pb-6 pt-2 scroll-smooth relative h-64 md:h-auto">
+                                <div className="space-y-0 relative" ref={timelineRef}>
+                                    {/* Vertical Line */}
+                                    <div className="absolute left-[11px] top-2 bottom-4 w-0.5 bg-gray-200 z-0"></div>
+
+                                    {steps.map((step, index) => {
+                                        const isCompleted = index < currentStep;
+                                        const isCurrent = index === currentStep;
+                                        
+                                        return (
+                                            <div 
+                                                id={`step-indicator-${index}`}
+                                                key={step.id} 
+                                                className={`flex gap-3 relative pb-6 last:pb-0 group ${isCompleted ? 'cursor-pointer' : ''}`}
+                                                onClick={() => jumpToStep(index)}
+                                            >
+                                                {/* Circle */}
+                                                <div className={`relative z-10 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-all duration-300 shadow-sm
+                                                    ${isCompleted ? 'bg-green-500 border-green-500 text-white group-hover:bg-green-600' : 
+                                                      isCurrent ? 'bg-white border-black text-black scale-110' : 'bg-gray-100 border-gray-300 text-gray-400'}`}>
+                                                    {isCompleted ? <CheckCircle className="w-3.5 h-3.5" /> : step.id}
+                                                </div>
+                                                
+                                                {/* Label */}
+                                                <div className="flex flex-col pt-0.5">
+                                                    <span className={`text-sm font-medium transition-colors duration-300 ${isCurrent ? 'text-black font-bold' : isCompleted ? 'text-gray-700 group-hover:text-black' : 'text-gray-400'}`}>
+                                                        {step.title}
+                                                    </span>
+                                                    {/* Subtitle in list */}
+                                                    <span className="text-[10px] text-gray-400 hidden md:block">
+                                                        {step.subtitle}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<AutocratSimulator />);
+    </script>
+</body>
+</html>
